@@ -14,8 +14,11 @@ class NokiaIntegration:
             phone_number="+999999301000" # to +91999999301005
         )
         self.location = self.my_device.location(max_age=3600)
-        print(self.location)
+        return self.location
 
 if __name__ == "__main__":
     nokia_integration = NokiaIntegration()
-    nokia_integration.get_device_location()
+    location = nokia_integration.get_device_location()
+    print(location.longitude, location.latitude)
+
+    
