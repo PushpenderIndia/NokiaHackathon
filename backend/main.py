@@ -2,7 +2,7 @@ import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 from NokiaIntegration import NokiaIntegration
@@ -22,11 +22,8 @@ if not all([username, password, cluster]):
 # Create properly encoded MongoDB URI
 MONGODB_URI = f"mongodb+srv://{quote_plus(username)}:{quote_plus(password)}@{cluster}/?retryWrites=true&w=majority"
 
-# Create properly encoded MongoDB URI
-MONGODB_URI = f"mongodb+srv://{quote_plus(username)}:{quote_plus(password)}@{cluster}/?retryWrites=true&w=majority"
-
-# Connect to MongoDB
-client = AsyncIOMotorClient(MONGODB_URI)
+# Connect to MongoDB using synchronous client (better for serverless)
+client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
 
 # Initialize FastAPI
@@ -82,11 +79,11 @@ def get_device_status():
     return {"status": status}
 
 @app.post("/emergency_detected")
-async def create_emergency_record(payload: Emergency):
+def create_emergency_record(payload: Emergency):
     try:
         collection = db["emergency"]
         payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
-        result = await collection.insert_one(payload_dict)
+        result = collection.insert_one(payload_dict)
         return {"message": "Emergency record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /emergency_detected: {str(e)}")
@@ -94,11 +91,11 @@ async def create_emergency_record(payload: Emergency):
 
 
 @app.post("/medical_record")
-async def create_medical_record(payload: MedicalRecord):
+def create_medical_record(payload: MedicalRecord):
     try:
         collection = db["medical_record"]
         payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
-        result = await collection.insert_one(payload_dict)
+        result = collection.insert_one(payload_dict)
         return {"message": "Medical record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /medical_record: {str(e)}")
@@ -106,13 +103,13 @@ async def create_medical_record(payload: MedicalRecord):
 
 
 @app.get("/status")
-async def get_status(call_id: str = Query(..., description="Unique call ID")):
+def get_status(call_id: str = Query(..., description="Unique call ID")):
     try:
         emergency_col = db["emergency"]
         medical_col = db["medical_record"]
 
-        emergency_data = await emergency_col.find_one({"call_id": call_id})
-        medical_data = await medical_col.find_one({"call_id": call_id})
+        emergency_data = emergency_col.find_one({"call_id": call_id})
+        medical_data = medical_col.find_one({"call_id": call_id})
 
         if not emergency_data and not medical_data:
             raise HTTPException(status_code=404, detail="No records found for this call_id")
@@ -140,11 +137,11 @@ def home():
     return {"message": "Welcome to RakshakAI Emergency & Medical Record API"}
 
 @app.get("/debug")
-async def debug():
+def debug():
     """Debug endpoint to check MongoDB connection"""
     try:
         # Try to ping MongoDB
-        await client.admin.command('ping')
+        client.admin.command('ping')
         return {
             "mongodb_connected": True,
             "database": DB_NAME,
