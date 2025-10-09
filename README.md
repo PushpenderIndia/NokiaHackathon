@@ -223,3 +223,9 @@ graph TD
 | ![](docs/7.jpeg) | ![](docs/8.jpeg) | |
 
 ![](docs/9.jpeg) 
+
+## Deployed Backend Link:
+
+- Multi Ai Agent: https://nokia-multi-agent.vercel.app/
+
+- FastAPI Main Backend: https://nokia-backend.vercel.app/docs
