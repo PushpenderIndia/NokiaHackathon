@@ -82,11 +82,17 @@ def get_device_status():
 def create_emergency_record(payload: Emergency):
     try:
         collection = db["emergency"]
-        payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+        # Use model_dump with mode='json' for proper serialization
+        try:
+            payload_dict = payload.model_dump(mode='json')
+        except (AttributeError, TypeError):
+            payload_dict = payload.dict()
         result = collection.insert_one(payload_dict)
         return {"message": "Emergency record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /emergency_detected: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
@@ -94,11 +100,17 @@ def create_emergency_record(payload: Emergency):
 def create_medical_record(payload: MedicalRecord):
     try:
         collection = db["medical_record"]
-        payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+        # Use model_dump with mode='json' for proper serialization
+        try:
+            payload_dict = payload.model_dump(mode='json')
+        except (AttributeError, TypeError):
+            payload_dict = payload.dict()
         result = collection.insert_one(payload_dict)
         return {"message": "Medical record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /medical_record: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
