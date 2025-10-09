@@ -84,15 +84,17 @@ def get_device_status():
 @app.post("/emergency_detected")
 async def create_emergency_record(payload: Emergency):
     collection = db["emergency"]
-    await collection.insert_one(payload.dict())
-    return {"message": "Emergency record stored successfully", "data": payload.dict()}
+    payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+    await collection.insert_one(payload_dict)
+    return {"message": "Emergency record stored successfully", "data": payload_dict}
 
 
 @app.post("/medical_record")
 async def create_medical_record(payload: MedicalRecord):
     collection = db["medical_record"]
-    await collection.insert_one(payload.dict())
-    return {"message": "Medical record stored successfully", "data": payload.dict()}
+    payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+    await collection.insert_one(payload_dict)
+    return {"message": "Medical record stored successfully", "data": payload_dict}
 
 
 @app.get("/status")
