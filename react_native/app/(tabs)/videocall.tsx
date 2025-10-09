@@ -295,10 +295,22 @@ export default function VideoCall() {
       const seconds = duration % 60;
       const durationStr = `${minutes} minutes ${seconds} seconds`;
 
-      // For demo purposes, using a sample query
-      // In production, this should be the actual transcription from the call
-      const query = `Patient had a video consultation lasting ${durationStr}. Patient reported symptoms during the call.`;
+      // Generate a unique call ID
+      const callId = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // For demo purposes, using a sample query with embedded call_id
+      // In production, this should be the actual transcription from the call
+      // You can alternate between emergency and non-emergency scenarios for testing
+      const isEmergencyTest = Math.random() > 0.5; // Random for demo
+
+      let query: string;
+      if (isEmergencyTest) {
+        query = `Call ID: ${callId}. Patient name: Emergency Patient. Location: Patient Home. Patient had a video consultation lasting ${durationStr}. Patient is experiencing severe chest pain radiating to left arm with heavy sweating and shortness of breath.`;
+      } else {
+        query = `Call ID: ${callId}. Patient name: John Smith. Patient had a video consultation lasting ${durationStr}. Patient reported mild headaches and feeling tired for the past 3 days.`;
+      }
+
+      console.log('Generated Call ID:', callId);
       console.log('Call duration:', durationStr);
       console.log('Analyzing query:', query);
       console.log('Calling analyzeQuery API...');
@@ -308,8 +320,8 @@ export default function VideoCall() {
       console.log('Analysis result:', analyzeResult);
 
       if (analyzeResult.classification === 'emergency') {
-        // Emergency detected - get call_id from result
-        const callId = analyzeResult.result.call_sid || 'UNKNOWN';
+        // Emergency detected - extract call_id from query or use from result
+        const extractedCallId = analyzeResult.result.call_sid || callId;
 
         Alert.alert(
           'Emergency Detected',
@@ -317,16 +329,19 @@ export default function VideoCall() {
           [
             {
               text: 'OK',
-              onPress: () => router.push({
-                pathname: '/emergency',
-                params: { callId }
-              }),
+              onPress: () => {
+                // Poll status and navigate to emergency screen
+                router.push({
+                  pathname: '/emergency',
+                  params: { callId: callId } // Use the callId we sent in the query
+                });
+              },
             },
           ]
         );
       } else {
-        // Non-emergency - get call_id from result
-        const callId = analyzeResult.result.call_id || 'UNKNOWN';
+        // Non-emergency - extract call_id from result
+        const extractedCallId = analyzeResult.result.call_id || callId;
 
         Alert.alert(
           'Consultation Complete',
@@ -334,10 +349,13 @@ export default function VideoCall() {
           [
             {
               text: 'View Report',
-              onPress: () => router.push({
-                pathname: '/report',
-                params: { callId }
-              }),
+              onPress: () => {
+                // Navigate to report screen
+                router.push({
+                  pathname: '/report',
+                  params: { callId: callId } // Use the callId we sent in the query
+                });
+              },
             },
           ]
         );
