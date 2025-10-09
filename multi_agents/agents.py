@@ -45,73 +45,120 @@ class AgentState(TypedDict):
 
 def emergency_agent(state: AgentState) -> AgentState:
     """
-    If detected emergency you have to call using twilio and fetch ambulance location
+    If detected emergency you have to call using twilio, fetch ambulance location, and send data to backend
     """
     print("--- Activating Emergency Agent ---")
-    
-    # Initialize ambulance_location
-    ambulance_location = None
-    
-    if not twilio_client:
-        # Fetch location even in simulation mode
-        try:
-            location_url = "https://nokia-backend.vercel.app/device_location"
-            print(f"Fetching ambulance location from {location_url}...")
-            
-            location_response = requests.get(location_url, timeout=10)
-            if location_response.status_code == 200:
-                ambulance_location = location_response.json()
-                print(f"✓ Successfully fetched ambulance location: {json.dumps(ambulance_location, indent=2)}")
-            else:
-                print(f"⚠ Failed to fetch location. Status: {location_response.status_code}, Response: {location_response.text}")
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Error fetching ambulance location: {e}")
-        
-        return {
-            **state, 
-            "call_sid": "SIMULATED_EMERGENCY_CALL",
-            "ambulance_location": json.dumps(ambulance_location) if ambulance_location else "Location unavailable"
-        }
+    query = state["query"]
+
+    # Extract call_id from query using Gemini
+    model = genai.GenerativeModel('gemini-2.5-pro')
+    extract_prompt = f"""Extract the following information from this query: "{query}"
+
+Output ONLY valid JSON in this exact format (no markdown, no extra text):
+{{
+  "call_id": "Extract call_id/Call ID from query, or 'EMERGENCY_' + timestamp if not found",
+  "patient_name": "Extract patient name from query or use 'Emergency Patient'",
+  "patient_location": "Extract location if mentioned, or 'Unknown Location'"
+}}"""
 
     try:
-        # Make emergency call first
-        call = twilio_client.calls.create(
-            twiml='<Response><Say>This is an emergency alert. A user requires immediate assistance.</Say></Response>',
-            to=emergency_contact_number,
-            from_=twilio_phone_number
-        )
-        print(f"Successfully initiated emergency call. SID: {call.sid}")
-        
-        # Then fetch ambulance location
-        try:
-            location_url = "https://nokia-backend.vercel.app/device_location"
-            print(f"Fetching ambulance location from {location_url}...")
-            
-            location_response = requests.get(location_url, timeout=10)
-            
-            if location_response.status_code == 200:
-                ambulance_location = location_response.json()
-                print(f"✓ Successfully fetched ambulance location: {json.dumps(ambulance_location, indent=2)}")
-            else:
-                print(f"⚠ Failed to fetch location. Status: {location_response.status_code}, Response: {location_response.text}")
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Error fetching ambulance location: {e}")
-        
-        # Return state with both call_sid and location
-        return {
-            **state, 
-            "call_sid": call.sid,
-            "ambulance_location": json.dumps(ambulance_location) if ambulance_location else "Location unavailable"
-        }
-        
+        extract_response = model.generate_content(extract_prompt)
+        extract_json = extract_response.text.strip()
+
+        if extract_json.startswith("```json"):
+            extract_json = extract_json[7:-3].strip()
+        elif extract_json.startswith("```"):
+            extract_json = extract_json[3:-3].strip()
+
+        extracted_info = json.loads(extract_json)
+        call_id = extracted_info.get("call_id", f"EMERGENCY_{int(datetime.now().timestamp())}")
+        patient_name = extracted_info.get("patient_name", "Emergency Patient")
+        patient_location = extracted_info.get("patient_location", "Unknown Location")
     except Exception as e:
-        print(f"Error making Twilio call: {e}")
-        return {
-            **state, 
-            "error": str(e), 
-            "call_sid": f"ERROR: {str(e)}",
-            "ambulance_location": "Location unavailable"
+        print(f"Error extracting info from query: {e}")
+        call_id = f"EMERGENCY_{int(datetime.now().timestamp())}"
+        patient_name = "Emergency Patient"
+        patient_location = "Unknown Location"
+
+    # Initialize ambulance_location
+    ambulance_location = None
+    call_sid = None
+
+    # Fetch ambulance location
+    try:
+        location_url = "https://nokia-backend.vercel.app/device_location"
+        print(f"Fetching ambulance location from {location_url}...")
+
+        location_response = requests.get(location_url, timeout=10)
+        if location_response.status_code == 200:
+            ambulance_location = location_response.json()
+            print(f"✓ Successfully fetched ambulance location: {json.dumps(ambulance_location, indent=2)}")
+        else:
+            print(f"⚠ Failed to fetch location. Status: {location_response.status_code}, Response: {location_response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Error fetching ambulance location: {e}")
+
+    # Make Twilio call if client is available
+    if twilio_client:
+        try:
+            call = twilio_client.calls.create(
+                twiml='<Response><Say>This is an emergency alert. A user requires immediate assistance.</Say></Response>',
+                to=emergency_contact_number,
+                from_=twilio_phone_number
+            )
+            call_sid = call.sid
+            print(f"Successfully initiated emergency call. SID: {call_sid}")
+        except Exception as e:
+            print(f"Error making Twilio call: {e}")
+            call_sid = f"SIMULATED_{call_id}"
+    else:
+        call_sid = f"SIMULATED_{call_id}"
+        print("Twilio not configured - using simulated call SID")
+
+    # Prepare emergency data for backend
+    emergency_data = {
+        "call_id": call_id,
+        "status": "dispatched",
+        "driver": {
+            "name": "Ambulance Driver",
+            "status": "en route",
+            "latitude": ambulance_location.get("latitude", 28.5494) if ambulance_location else 28.5494,
+            "longitude": ambulance_location.get("longitude", 77.2500) if ambulance_location else 77.2500
+        },
+        "patient": {
+            "location": patient_location,
+            "latitude": 28.5494,  # Default patient location (should be extracted from device)
+            "longitude": 77.2588
         }
+    }
+
+    # Send data to backend
+    try:
+        backend_url = "https://nokia-backend.vercel.app/emergency_detected"
+        headers = {"Content-Type": "application/json"}
+
+        print(f"Sending emergency data to backend: {json.dumps(emergency_data, indent=2)}")
+
+        backend_response = requests.post(
+            backend_url,
+            json=emergency_data,
+            headers=headers,
+            timeout=10
+        )
+
+        if backend_response.status_code in [200, 201]:
+            print(f"✓ Successfully sent emergency data to backend. Status: {backend_response.status_code}")
+            print(f"Backend response: {backend_response.json()}")
+        else:
+            print(f"⚠ Backend returned status {backend_response.status_code}: {backend_response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Error sending emergency data to backend: {e}")
+
+    return {
+        **state,
+        "call_sid": call_sid,
+        "ambulance_location": json.dumps(ambulance_location) if ambulance_location else "Location unavailable"
+    }
 
 def specialist_agent(state: AgentState) -> AgentState:
     """
