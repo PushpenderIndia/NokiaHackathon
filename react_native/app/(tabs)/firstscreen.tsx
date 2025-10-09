@@ -9,7 +9,7 @@ const VAPI_PUBLIC_KEY = '1046cad0-14a3-4b6b-bb62-4370bae50c86'
 const FirstScreen = () => {
   const router = useRouter()
   const [transcript, setTranscript] = useState<Array<{speaker: string, text: string}>>([
-    { speaker: 'doctor', text: 'Hello! I\'m your AI doctor. How can I help you today?' }
+    { speaker: 'doctor', text: 'Hello! I\'m your Symptom Assistant. How can I help you today?' }
   ])
   const scrollViewRef = useRef<ScrollView>(null)
   const pulseAnim = useRef(new Animated.Value(1)).current
@@ -54,7 +54,7 @@ const FirstScreen = () => {
       setIsConnected(true)
       setTranscript(prev => [...prev, {
         speaker: 'doctor',
-        text: 'Connected! The AI doctor is listening...'
+        text: 'Connected! The Symptom Assistant is listening...'
       }])
     })
 
@@ -63,7 +63,7 @@ const FirstScreen = () => {
       setIsConnected(false)
       setTranscript(prev => [...prev, {
         speaker: 'doctor',
-        text: 'Call ended. Thank you for using AI Doctor!'
+        text: 'Call ended. Thank you for using Symptom Assistant!'
       }])
       // Navigate to report screen after consultation ends
       setTimeout(() => {
@@ -191,7 +191,7 @@ Keep your responses concise and conversational. After gathering sufficient infor
             <View style={styles.activePulse} />
           )}
         </View>
-        <Text style={styles.doctorTitle}>AI Doctor</Text>
+        <Text style={styles.doctorTitle}>Symptom Assistant</Text>
         <Text style={styles.doctorSubtitle}>
           {isConnected ? 'Listening...' : 'Tap below to start consultation'}
         </Text>
@@ -208,7 +208,7 @@ Keep your responses concise and conversational. After gathering sufficient infor
           {transcript.map((message, index) => (
             <View key={index} style={styles.messageContainer}>
               <Text style={message.speaker === 'doctor' ? styles.aiMessage : styles.patientMessage}>
-                {message.speaker === 'doctor' ? '🩺 AI Doctor: ' : '👤 You: '}
+                {message.speaker === 'doctor' ? '🩺 Symptom Assistant: ' : '👤 You: '}
                 {message.text}
               </Text>
             </View>

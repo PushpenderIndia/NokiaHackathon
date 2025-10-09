@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice consultations with the AI doctor.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice consultations with the Symptom Assistant.",
         "NSCameraUsageDescription": "This app needs access to your camera for video consultations.",
         "ITSAppUsesNonExemptEncryption": false
       },
