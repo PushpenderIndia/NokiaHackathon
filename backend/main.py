@@ -138,3 +138,31 @@ async def get_status(call_id: str = Query(..., description="Unique call ID")):
 @app.get("/")
 def home():
     return {"message": "Welcome to RakshakAI Emergency & Medical Record API"}
+
+@app.get("/debug")
+async def debug():
+    """Debug endpoint to check MongoDB connection"""
+    try:
+        # Try to ping MongoDB
+        await client.admin.command('ping')
+        return {
+            "mongodb_connected": True,
+            "database": DB_NAME,
+            "env_vars_set": {
+                "MONGO_USERNAME": bool(os.getenv("MONGO_USERNAME")),
+                "MONGO_PASSWORD": bool(os.getenv("MONGO_PASSWORD")),
+                "MONGO_CLUSTER": bool(os.getenv("MONGO_CLUSTER")),
+                "MONGO_DB_NAME": bool(os.getenv("MONGO_DB_NAME"))
+            }
+        }
+    except Exception as e:
+        return {
+            "mongodb_connected": False,
+            "error": str(e),
+            "env_vars_set": {
+                "MONGO_USERNAME": bool(os.getenv("MONGO_USERNAME")),
+                "MONGO_PASSWORD": bool(os.getenv("MONGO_PASSWORD")),
+                "MONGO_CLUSTER": bool(os.getenv("MONGO_CLUSTER")),
+                "MONGO_DB_NAME": bool(os.getenv("MONGO_DB_NAME"))
+            }
+        }
