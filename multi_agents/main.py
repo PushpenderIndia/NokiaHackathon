@@ -153,15 +153,18 @@ def internal_error(error):
         "message": "An unexpected error occurred"
     }), 500
 
+# Export for Vercel
+app = flask_app
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    
+
     print(f"\n{'='*50}")
     print(f"🏥 Medical AI Assistant API Starting...")
     print(f"{'='*50}")
     print(f"📍 Running on: http://localhost:{port}")
     print(f"🔧 Debug mode: {debug}")
     print(f"{'='*50}\n")
-    
+
     flask_app.run(host='0.0.0.0', port=port, debug=debug)
