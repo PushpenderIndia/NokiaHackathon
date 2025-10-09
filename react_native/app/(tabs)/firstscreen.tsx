@@ -1,8 +1,9 @@
 import { Link, useRouter } from 'expo-router'
 import React, { useState, useEffect, useRef } from 'react'
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Animated, Alert, Platform } from 'react-native'
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Animated, Alert, Platform, ActivityIndicator } from 'react-native'
 import Vapi from '@vapi-ai/react-native'
 import LottieView from 'lottie-react-native'
+import { analyzeQuery } from '../services/api'
 
 const VAPI_PUBLIC_KEY = '1046cad0-14a3-4b6b-bb62-4370bae50c86'
 
@@ -14,8 +15,10 @@ const FirstScreen = () => {
   const scrollViewRef = useRef<ScrollView>(null)
   const pulseAnim = useRef(new Animated.Value(1)).current
   const [isConnected, setIsConnected] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const vapiRef = useRef<any>(null)
   const lottieRef = useRef<LottieView>(null)
+  const callStartTimeRef = useRef<Date | null>(null)
 
   // Pulse animation for doctor icon
   useEffect(() => {
@@ -52,23 +55,23 @@ const FirstScreen = () => {
     vapiRef.current.on('call-start', () => {
       console.log('Call started')
       setIsConnected(true)
+      callStartTimeRef.current = new Date()
       setTranscript(prev => [...prev, {
         speaker: 'doctor',
         text: 'Connected! The Symptom Assistant is listening...'
       }])
     })
 
-    vapiRef.current.on('call-end', () => {
+    vapiRef.current.on('call-end', async () => {
       console.log('Call ended')
       setIsConnected(false)
       setTranscript(prev => [...prev, {
         speaker: 'doctor',
-        text: 'Call ended. Thank you for using Symptom Assistant!'
+        text: 'Call ended. Analyzing your consultation...'
       }])
-      // Navigate to report screen after consultation ends
-      setTimeout(() => {
-        router.push('/report')
-      }, 1000)
+
+      // Trigger analysis
+      await handleCallAnalysis()
     })
 
     vapiRef.current.on('speech-start', () => {
@@ -105,6 +108,94 @@ const FirstScreen = () => {
       }
     }
   }, [])
+
+  const handleCallAnalysis = async () => {
+    console.log('=== handleCallAnalysis started ===')
+    setIsProcessing(true)
+
+    try {
+      // Calculate call duration
+      const duration = callStartTimeRef.current
+        ? Math.floor((new Date().getTime() - callStartTimeRef.current.getTime()) / 1000)
+        : 0
+
+      const minutes = Math.floor(duration / 60)
+      const seconds = duration % 60
+      const durationStr = `${minutes} minutes ${seconds} seconds`
+
+      // Generate unique call ID
+      const callId = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      // Extract patient symptoms from transcript
+      const patientMessages = transcript
+        .filter(msg => msg.speaker === 'patient')
+        .map(msg => msg.text)
+        .join('. ')
+
+      // Build query for multi-agent API
+      const query = `Call ID: ${callId}. Patient name: Patient. Patient had a voice consultation lasting ${durationStr}. Patient reported: ${patientMessages || 'symptoms during consultation'}`
+
+      console.log('Generated Call ID:', callId)
+      console.log('Call duration:', durationStr)
+      console.log('Patient symptoms:', patientMessages)
+      console.log('Calling analyzeQuery API...')
+
+      // Call multi-agent analyze API
+      const analyzeResult = await analyzeQuery(query)
+      console.log('Analysis result:', analyzeResult)
+
+      if (analyzeResult.classification === 'emergency') {
+        // Emergency detected
+        Alert.alert(
+          'Emergency Detected',
+          'Emergency services have been notified. Redirecting to emergency tracking...',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.push({
+                  pathname: '/emergency',
+                  params: { callId }
+                })
+              },
+            },
+          ]
+        )
+      } else {
+        // Non-emergency
+        Alert.alert(
+          'Consultation Complete',
+          'Your consultation report is ready. Redirecting...',
+          [
+            {
+              text: 'View Report',
+              onPress: () => {
+                router.push({
+                  pathname: '/report',
+                  params: { callId }
+                })
+              },
+            },
+          ]
+        )
+      }
+    } catch (error) {
+      console.error('Error analyzing call:', error)
+      Alert.alert(
+        'Processing Error',
+        'Failed to process consultation. Showing report with default data.',
+        [
+          {
+            text: 'View Report',
+            onPress: () => router.push('/report'),
+          },
+        ]
+      )
+    } finally {
+      setIsProcessing(false)
+      callStartTimeRef.current = null
+    }
+  }
 
   const startVapiCall = async () => {
     try {
@@ -177,6 +268,17 @@ Keep your responses concise and conversational. After gathering sufficient infor
 
   return (
     <View style={styles.container}>
+      {/* Processing Overlay */}
+      {isProcessing && (
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingCard}>
+            <ActivityIndicator size="large" color="#14b8a6" />
+            <Text style={styles.processingText}>Analyzing consultation...</Text>
+            <Text style={styles.processingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
+
       {/* Doctor Animation Container */}
       <View style={styles.doctorAnimationContainer}>
         <View style={styles.doctorIconWrapper}>
@@ -419,5 +521,43 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     opacity: 0.7,
+  },
+  processingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  processingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0c4a6e',
+    textAlign: 'center',
+  },
+  processingSubtext: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
   },
 })
