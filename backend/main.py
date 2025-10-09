@@ -83,42 +83,56 @@ def get_device_status():
 
 @app.post("/emergency_detected")
 async def create_emergency_record(payload: Emergency):
-    collection = db["emergency"]
-    payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
-    await collection.insert_one(payload_dict)
-    return {"message": "Emergency record stored successfully", "data": payload_dict}
+    try:
+        collection = db["emergency"]
+        payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+        result = await collection.insert_one(payload_dict)
+        return {"message": "Emergency record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
+    except Exception as e:
+        print(f"Error in /emergency_detected: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.post("/medical_record")
 async def create_medical_record(payload: MedicalRecord):
-    collection = db["medical_record"]
-    payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
-    await collection.insert_one(payload_dict)
-    return {"message": "Medical record stored successfully", "data": payload_dict}
+    try:
+        collection = db["medical_record"]
+        payload_dict = payload.model_dump() if hasattr(payload, 'model_dump') else payload.dict()
+        result = await collection.insert_one(payload_dict)
+        return {"message": "Medical record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
+    except Exception as e:
+        print(f"Error in /medical_record: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/status")
 async def get_status(call_id: str = Query(..., description="Unique call ID")):
-    emergency_col = db["emergency"]
-    medical_col = db["medical_record"]
+    try:
+        emergency_col = db["emergency"]
+        medical_col = db["medical_record"]
 
-    emergency_data = await emergency_col.find_one({"call_id": call_id})
-    medical_data = await medical_col.find_one({"call_id": call_id})
+        emergency_data = await emergency_col.find_one({"call_id": call_id})
+        medical_data = await medical_col.find_one({"call_id": call_id})
 
-    if not emergency_data and not medical_data:
-        raise HTTPException(status_code=404, detail="No records found for this call_id")
+        if not emergency_data and not medical_data:
+            raise HTTPException(status_code=404, detail="No records found for this call_id")
 
-    # Convert ObjectId to string
-    if emergency_data and "_id" in emergency_data:
-        emergency_data["_id"] = str(emergency_data["_id"])
-    if medical_data and "_id" in medical_data:
-        medical_data["_id"] = str(medical_data["_id"])
+        # Convert ObjectId to string
+        if emergency_data and "_id" in emergency_data:
+            emergency_data["_id"] = str(emergency_data["_id"])
+        if medical_data and "_id" in medical_data:
+            medical_data["_id"] = str(medical_data["_id"])
 
-    return {
-        "call_id": call_id,
-        "emergency_details": emergency_data or "No emergency data",
-        "medical_record_details": medical_data or "No medical record data"
-    }
+        return {
+            "call_id": call_id,
+            "emergency_details": emergency_data or "No emergency data",
+            "medical_record_details": medical_data or "No medical record data"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in /status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/")
