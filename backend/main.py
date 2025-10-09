@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
+from NokiaIntegration import NokiaIntegration
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +31,7 @@ db = client[DB_NAME]
 
 # Initialize FastAPI
 app = FastAPI(title="RakshakAI Multi-Collection API")
+nokia_integration = NokiaIntegration()
 
 # ----------------------------------------
 # MODELS
@@ -68,6 +70,16 @@ class MedicalRecord(BaseModel):
 # ----------------------------------------
 # ROUTES
 # ----------------------------------------
+
+@app.get("/device_location")
+def get_device_location():
+    location = nokia_integration.get_device_location()
+    return {"longitude": location.longitude, "latitude": location.latitude}
+
+@app.get("/device_status")
+def get_device_status():
+    status = nokia_integration.get_device_status()
+    return {"status": status}
 
 @app.post("/emergency_detected")
 async def create_emergency_record(payload: Emergency):
