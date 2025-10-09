@@ -1,9 +1,73 @@
-import { Link } from 'expo-router'
-import React from 'react'
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native'
+import { Link, useLocalSearchParams } from 'expo-router'
+import React, { useEffect, useState } from 'react'
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, ActivityIndicator, Alert } from 'react-native'
 import LottieView from 'lottie-react-native'
+import { pollStatus, type StatusResponse } from '../services/api'
 
 const ReportScreen = () => {
+  const params = useLocalSearchParams<{ callId?: string }>()
+  const [isLoading, setIsLoading] = useState(true)
+  const [reportData, setReportData] = useState<StatusResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchReportData = async () => {
+      if (!params.callId) {
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        setIsLoading(true)
+        const data = await pollStatus(params.callId, {
+          maxAttempts: 20,
+          interval: 3000,
+          onProgress: (attempt, max) => {
+            console.log(`Polling report data: ${attempt}/${max}`)
+          },
+        })
+        setReportData(data)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching report data:', err)
+        setError('Failed to load report details')
+        Alert.alert('Error', 'Could not load consultation report. Showing default data.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchReportData()
+  }, [params.callId])
+
+  // Extract medical record details with fallbacks
+  const medicalRecord =
+    reportData?.medical_record_details && typeof reportData.medical_record_details === 'object'
+      ? reportData.medical_record_details
+      : null
+
+  const patientName = medicalRecord?.patient_information?.name || 'John Doe'
+  const consultationDate = medicalRecord?.patient_information?.date || 'October 5, 2025'
+  const duration = medicalRecord?.patient_information?.duration || '5 minutes 32 seconds'
+  const chiefComplaint = medicalRecord?.chief_complaint || 'Patient reports persistent headache with occasional dizziness for the past 3 days.'
+  const symptoms = medicalRecord?.reported_symptoms || [
+    'Headache (moderate intensity, frontal region)',
+    'Dizziness (intermittent)',
+    'Mild nausea',
+    'Light sensitivity'
+  ]
+  const aiAnalysis = medicalRecord?.ai_analysis ||
+    'Based on the symptoms described, this appears to be consistent with tension-type headache or possible migraine. No red flag symptoms were identified. Recommend consultation with a primary care physician or neurologist for proper diagnosis.'
+  const recommendedSpecialty = medicalRecord?.recommended_specialty || 'Neurologist or Primary Care Physician'
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#14b8a6" />
+        <Text style={styles.loadingText}>Loading consultation report...</Text>
+      </View>
+    )
+  }
   return (
     <ScrollView
       style={styles.container}
@@ -27,15 +91,15 @@ const ReportScreen = () => {
         <Text style={styles.cardTitle}>Patient Information</Text>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Name:</Text>
-          <Text style={styles.infoValue}>John Doe</Text>
+          <Text style={styles.infoValue}>{patientName}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Date:</Text>
-          <Text style={styles.infoValue}>October 5, 2025</Text>
+          <Text style={styles.infoValue}>{consultationDate}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Duration:</Text>
-          <Text style={styles.infoValue}>5 minutes 32 seconds</Text>
+          <Text style={styles.infoValue}>{duration}</Text>
         </View>
       </View>
 
@@ -43,45 +107,33 @@ const ReportScreen = () => {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Chief Complaint</Text>
         <Text style={styles.description}>
-          Patient reports persistent headache with occasional dizziness for the past 3 days.
+          {chiefComplaint}
         </Text>
       </View>
 
       {/* Symptoms Card */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Reported Symptoms</Text>
-        <View style={styles.symptomItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={styles.symptomText}>Headache (moderate intensity, frontal region)</Text>
-        </View>
-        <View style={styles.symptomItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={styles.symptomText}>Dizziness (intermittent)</Text>
-        </View>
-        <View style={styles.symptomItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={styles.symptomText}>Mild nausea</Text>
-        </View>
-        <View style={styles.symptomItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={styles.symptomText}>Light sensitivity</Text>
-        </View>
+        {symptoms.map((symptom, index) => (
+          <View key={index} style={styles.symptomItem}>
+            <Text style={styles.bulletPoint}>•</Text>
+            <Text style={styles.symptomText}>{symptom}</Text>
+          </View>
+        ))}
       </View>
 
       {/* AI Analysis Card */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>AI Analysis</Text>
         <Text style={styles.description}>
-          Based on the symptoms described, this appears to be consistent with tension-type headache
-          or possible migraine. No red flag symptoms were identified. Recommend consultation with
-          a primary care physician or neurologist for proper diagnosis.
+          {aiAnalysis}
         </Text>
       </View>
 
       {/* Recommended Specialist Card */}
       <View style={[styles.card, styles.highlightCard]}>
         <Text style={styles.cardTitle}>Recommended Specialist</Text>
-        <Text style={styles.specialistName}>Neurologist or Primary Care Physician</Text>
+        <Text style={styles.specialistName}>{recommendedSpecialty}</Text>
         <Text style={styles.urgencyLevel}>Urgency Level: Routine (Non-Emergency)</Text>
       </View>
 
@@ -119,6 +171,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f9ff',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748b',
+    marginTop: 12,
   },
   contentContainer: {
     padding: 20,

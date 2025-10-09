@@ -11,6 +11,7 @@ import {
   Platform,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import {
   RTCView,
@@ -20,6 +21,7 @@ import {
 import Peer, { MediaConnection } from 'peerjs';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { analyzeQuery, pollStatus, type AnalyzeResponse } from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,10 +39,12 @@ export default function VideoCall() {
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [callDuration, setCallDuration] = useState<number>(0);
   const [peerReady, setPeerReady] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   const peerInstance = useRef<Peer | null>(null);
   const currentCall = useRef<MediaConnection | null>(null);
   const callTimer = useRef<NodeJS.Timeout | null>(null);
+  const callStartTime = useRef<Date | null>(null);
 
   useEffect(() => {
     requestPermissions();
@@ -184,6 +188,7 @@ export default function VideoCall() {
         setRemoteStream(remoteStream as unknown as MediaStream);
         setIsCallActive(true);
         setIsCalling(false);
+        callStartTime.current = new Date();
       });
 
       call.on('close', () => {
@@ -255,6 +260,7 @@ export default function VideoCall() {
         setRemoteStream(remoteStream as unknown as MediaStream);
         setIsCallActive(true);
         setIsCalling(false);
+        callStartTime.current = new Date();
       });
 
       call.on('close', () => {
@@ -275,7 +281,91 @@ export default function VideoCall() {
     }
   };
 
+  const handleCallAnalysis = async () => {
+    console.log('handleCallAnalysis started');
+    setIsProcessing(true);
+
+    try {
+      // Calculate call duration
+      const duration = callStartTime.current
+        ? Math.floor((new Date().getTime() - callStartTime.current.getTime()) / 1000)
+        : 0;
+
+      const minutes = Math.floor(duration / 60);
+      const seconds = duration % 60;
+      const durationStr = `${minutes} minutes ${seconds} seconds`;
+
+      // For demo purposes, using a sample query
+      // In production, this should be the actual transcription from the call
+      const query = `Patient had a video consultation lasting ${durationStr}. Patient reported symptoms during the call.`;
+
+      console.log('Call duration:', durationStr);
+      console.log('Analyzing query:', query);
+      console.log('Calling analyzeQuery API...');
+
+      // Step 1: Analyze the query with multi-agent API
+      const analyzeResult = await analyzeQuery(query);
+      console.log('Analysis result:', analyzeResult);
+
+      if (analyzeResult.classification === 'emergency') {
+        // Emergency detected - get call_id from result
+        const callId = analyzeResult.result.call_sid || 'UNKNOWN';
+
+        Alert.alert(
+          'Emergency Detected',
+          'Emergency services have been notified. Redirecting to emergency tracking...',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push({
+                pathname: '/emergency',
+                params: { callId }
+              }),
+            },
+          ]
+        );
+      } else {
+        // Non-emergency - get call_id from result
+        const callId = analyzeResult.result.call_id || 'UNKNOWN';
+
+        Alert.alert(
+          'Consultation Complete',
+          'Your consultation report is ready. Redirecting...',
+          [
+            {
+              text: 'View Report',
+              onPress: () => router.push({
+                pathname: '/report',
+                params: { callId }
+              }),
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error analyzing call:', error);
+      Alert.alert(
+        'Processing Error',
+        'Failed to process consultation. Please try again or contact support.',
+        [
+          {
+            text: 'Go Home',
+            onPress: () => router.push('/'),
+          },
+        ]
+      );
+    } finally {
+      setIsProcessing(false);
+      callStartTime.current = null;
+    }
+  };
+
   const endCall = () => {
+    console.log('endCall triggered, callStartTime:', callStartTime.current);
+
+    // Check if we should trigger analysis BEFORE clearing state
+    const shouldAnalyze = callStartTime.current !== null;
+
     // Close the call
     if (currentCall.current) {
       currentCall.current.close();
@@ -295,6 +385,14 @@ export default function VideoCall() {
     setIsCalling(false);
     setIsMuted(false);
     setIsVideoOff(false);
+
+    // Trigger analysis if call had started
+    if (shouldAnalyze) {
+      console.log('Triggering handleCallAnalysis...');
+      handleCallAnalysis();
+    } else {
+      console.log('Call analysis skipped - no callStartTime');
+    }
   };
 
   const toggleMute = () => {
@@ -429,6 +527,17 @@ export default function VideoCall() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      {/* Processing Overlay */}
+      {isProcessing && (
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingCard}>
+            <ActivityIndicator size="large" color="#14b8a6" />
+            <Text style={styles.processingText}>Analyzing consultation...</Text>
+            <Text style={styles.processingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
 
       {/* Video Container - Full Screen */}
       <View style={styles.videoContainer}>
@@ -763,5 +872,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Processing Overlay
+  processingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    minWidth: 200,
+  },
+  processingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  processingSubtext: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
   },
 });

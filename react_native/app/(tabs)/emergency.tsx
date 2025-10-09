@@ -1,17 +1,22 @@
-import { Link } from 'expo-router'
-import React, { useEffect, useRef } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View, Image, Dimensions, ScrollView, Animated } from 'react-native'
+import { Link, useLocalSearchParams } from 'expo-router'
+import React, { useEffect, useRef, useState } from 'react'
+import { StyleSheet, Text, TouchableOpacity, View, Image, Dimensions, ScrollView, Animated, ActivityIndicator, Alert } from 'react-native'
 import LottieView from 'lottie-react-native'
 import MapView, { Marker, Polyline } from 'react-native-maps'
+import { pollStatus, type StatusResponse } from '../services/api'
 
 const { width } = Dimensions.get('window')
 
-// Coordinates for Kalkaji to Nehru Place
-const kalkaji = { latitude: 28.5494, longitude: 77.2588 }
-const nehruPlace = { latitude: 28.5494, longitude: 77.2500 }
+// Default coordinates for Kalkaji to Nehru Place (fallback)
+const defaultPatientLocation = { latitude: 28.5494, longitude: 77.2588 }
+const defaultAmbulanceLocation = { latitude: 28.5494, longitude: 77.2500 }
 
 const EmergencyScreen = () => {
+  const params = useLocalSearchParams<{ callId?: string }>()
   const pulseAnim = useRef(new Animated.Value(1)).current
+  const [isLoading, setIsLoading] = useState(true)
+  const [emergencyData, setEmergencyData] = useState<StatusResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -31,6 +36,61 @@ const EmergencyScreen = () => {
     pulse.start()
     return () => pulse.stop()
   }, [])
+
+  useEffect(() => {
+    const fetchEmergencyData = async () => {
+      if (!params.callId) {
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        setIsLoading(true)
+        const data = await pollStatus(params.callId, {
+          maxAttempts: 20,
+          interval: 3000,
+          onProgress: (attempt, max) => {
+            console.log(`Polling attempt ${attempt}/${max}`)
+          },
+        })
+        setEmergencyData(data)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching emergency data:', err)
+        setError('Failed to load emergency details')
+        Alert.alert('Error', 'Could not load emergency details. Showing default data.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchEmergencyData()
+  }, [params.callId])
+
+  // Extract emergency details with fallbacks
+  const emergencyDetails =
+    emergencyData?.emergency_details && typeof emergencyData.emergency_details === 'object'
+      ? emergencyData.emergency_details
+      : null
+
+  const driverName = emergencyDetails?.driver?.name || 'Manoj'
+  const driverStatus = emergencyDetails?.driver?.status || 'On the way'
+  const patientLocation = emergencyDetails?.patient?.location || 'Kalkaji'
+  const ambulanceLocation = emergencyDetails?.driver
+    ? { latitude: emergencyDetails.driver.latitude, longitude: emergencyDetails.driver.longitude }
+    : defaultAmbulanceLocation
+  const patientCoords = emergencyDetails?.patient
+    ? { latitude: emergencyDetails.patient.latitude, longitude: emergencyDetails.patient.longitude }
+    : defaultPatientLocation
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#14b8a6" />
+        <Text style={styles.loadingText}>Loading emergency details...</Text>
+      </View>
+    )
+  }
 
   return (
     <ScrollView
@@ -58,7 +118,7 @@ const EmergencyScreen = () => {
 
         <View style={styles.driverInfoRow}>
           <Text style={styles.driverLabel}>Driver:</Text>
-          <Text style={styles.driverName}>Manoj (On the way)</Text>
+          <Text style={styles.driverName}>{driverName} ({driverStatus})</Text>
         </View>
 
         {/* Google Map View */}
@@ -66,31 +126,31 @@ const EmergencyScreen = () => {
           <MapView
             style={styles.map}
             initialRegion={{
-              latitude: 28.5494,
-              longitude: 77.2544,
+              latitude: (patientCoords.latitude + ambulanceLocation.latitude) / 2,
+              longitude: (patientCoords.longitude + ambulanceLocation.longitude) / 2,
               latitudeDelta: 0.02,
               longitudeDelta: 0.02,
             }}
           >
-            {/* Marker for Kalkaji (Start) */}
+            {/* Marker for Patient Location */}
             <Marker
-              coordinate={kalkaji}
+              coordinate={patientCoords}
               title="Your Location"
-              description="Kalkaji"
+              description={patientLocation}
               pinColor="blue"
             />
 
-            {/* Marker for Nehru Place (Destination) */}
+            {/* Marker for Ambulance Location */}
             <Marker
-              coordinate={nehruPlace}
+              coordinate={ambulanceLocation}
               title="Ambulance Location"
-              description="Nehru Place"
+              description={`Driver: ${driverName}`}
               pinColor="red"
             />
 
             {/* Route Line */}
             <Polyline
-              coordinates={[kalkaji, nehruPlace]}
+              coordinates={[patientCoords, ambulanceLocation]}
               strokeColor="#14b8a6"
               strokeWidth={4}
             />
@@ -111,7 +171,7 @@ const EmergencyScreen = () => {
             <Text style={styles.infoIcon}>📍</Text>
             <View>
               <Text style={styles.infoLabelSmall}>Location</Text>
-              <Text style={styles.infoValueSmall}>Kalkaji</Text>
+              <Text style={styles.infoValueSmall}>{patientLocation}</Text>
             </View>
           </View>
           <View style={styles.verticalDivider} />
@@ -154,6 +214,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f9ff',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748b',
+    marginTop: 12,
   },
   contentContainer: {
     padding: 20,

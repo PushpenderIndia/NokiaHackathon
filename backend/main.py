@@ -88,7 +88,8 @@ def create_emergency_record(payload: Emergency):
         except (AttributeError, TypeError):
             payload_dict = payload.dict()
         result = collection.insert_one(payload_dict)
-        return {"message": "Emergency record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
+        # Don't include _id in response data to avoid ObjectId serialization issues
+        return {"message": "Emergency record stored successfully", "call_id": payload.call_id, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /emergency_detected: {str(e)}")
         import traceback
@@ -106,7 +107,8 @@ def create_medical_record(payload: MedicalRecord):
         except (AttributeError, TypeError):
             payload_dict = payload.dict()
         result = collection.insert_one(payload_dict)
-        return {"message": "Medical record stored successfully", "data": payload_dict, "id": str(result.inserted_id)}
+        # Don't include _id in response data to avoid ObjectId serialization issues
+        return {"message": "Medical record stored successfully", "call_id": payload.call_id, "id": str(result.inserted_id)}
     except Exception as e:
         print(f"Error in /medical_record: {str(e)}")
         import traceback
@@ -146,7 +148,7 @@ def get_status(call_id: str = Query(..., description="Unique call ID")):
 
 @app.get("/")
 def home():
-    return {"message": "Welcome to RakshakAI Emergency & Medical Record API"}
+    return {"message": "Welcome to RakshakAI Emergency & Medical Record API", "version": "v2.1-pydantic-fix"}
 
 @app.get("/debug")
 def debug():
