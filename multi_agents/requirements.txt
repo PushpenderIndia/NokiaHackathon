@@ -1,0 +1,7 @@
+Flask
+flask-cors
+google-generativeai
+langgraph
+twilio
+python-dotenv
+requests
