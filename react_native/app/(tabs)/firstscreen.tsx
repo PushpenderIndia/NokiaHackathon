@@ -9,9 +9,8 @@ const VAPI_PUBLIC_KEY = '1046cad0-14a3-4b6b-bb62-4370bae50c86'
 
 const FirstScreen = () => {
   const router = useRouter()
-  const [transcript, setTranscript] = useState<Array<{speaker: string, text: string}>>([
-    { speaker: 'doctor', text: 'Hello! I\'m your Symptom Assistant. How can I help you today?' }
-  ])
+  const [transcript, setTranscript] = useState<Array<{speaker: string, text: string}>>([])
+  const transcriptRef = useRef<Array<{speaker: string, text: string}>>([])
   const scrollViewRef = useRef<ScrollView>(null)
   const pulseAnim = useRef(new Animated.Value(1)).current
   const [isConnected, setIsConnected] = useState(false)
@@ -56,21 +55,25 @@ const FirstScreen = () => {
       console.log('Call started')
       setIsConnected(true)
       callStartTimeRef.current = new Date()
-      setTranscript(prev => [...prev, {
+      const newMessage = {
         speaker: 'doctor',
         text: 'Connected! The Symptom Assistant is listening...'
-      }])
+      }
+      transcriptRef.current = [...transcriptRef.current, newMessage]
+      setTranscript(prev => [...prev, newMessage])
     })
 
     vapiRef.current.on('call-end', async () => {
       console.log('Call ended')
       setIsConnected(false)
-      setTranscript(prev => [...prev, {
+      const endMessage = {
         speaker: 'doctor',
         text: 'Call ended. Analyzing your consultation...'
-      }])
+      }
+      transcriptRef.current = [...transcriptRef.current, endMessage]
+      setTranscript(prev => [...prev, endMessage])
 
-      // Trigger analysis
+      // Trigger analysis with current transcript
       await handleCallAnalysis()
     })
 
@@ -87,10 +90,12 @@ const FirstScreen = () => {
 
       // Handle different message types
       if (message.type === 'transcript' && message.transcriptType === 'final') {
-        setTranscript(prev => [...prev, {
+        const newMessage = {
           speaker: message.role === 'assistant' ? 'doctor' : 'patient',
           text: message.transcript
-        }])
+        }
+        transcriptRef.current = [...transcriptRef.current, newMessage]
+        setTranscript(prev => [...prev, newMessage])
       } else if (message.type === 'conversation-update') {
         // Handle conversation updates
         console.log('Conversation update:', message)
@@ -126,8 +131,8 @@ const FirstScreen = () => {
       // Generate unique call ID
       const callId = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-      // Format the entire transcript as a conversation
-      const fullTranscript = transcript
+      // Format the entire transcript as a conversation using the ref (most up-to-date)
+      const fullTranscript = transcriptRef.current
         .map(msg => `${msg.speaker === 'doctor' ? 'Doctor' : 'Patient'}: ${msg.text}`)
         .join('\n')
 
