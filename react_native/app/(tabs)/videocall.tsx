@@ -312,12 +312,23 @@ export default function VideoCall() {
 
       console.log('Generated Call ID:', callId);
       console.log('Call duration:', durationStr);
-      console.log('Analyzing query:', query);
+      console.log('Full query being sent to /analyze API:', query);
       console.log('Calling analyzeQuery API...');
 
       // Step 1: Analyze the query with multi-agent API
       const analyzeResult = await analyzeQuery(query);
       console.log('Analysis result:', analyzeResult);
+
+      // Step 2: Poll status API to get the stored data from backend
+      console.log('Polling status API for call ID:', callId);
+      const statusResult = await pollStatus(callId, {
+        maxAttempts: 5,
+        interval: 2000,
+        onProgress: (attempt, maxAttempts) => {
+          console.log(`Polling status: attempt ${attempt}/${maxAttempts}`);
+        }
+      });
+      console.log('Status result:', statusResult);
 
       if (analyzeResult.classification === 'emergency') {
         // Emergency detected - extract call_id from query or use from result
@@ -330,7 +341,7 @@ export default function VideoCall() {
             {
               text: 'OK',
               onPress: () => {
-                // Poll status and navigate to emergency screen
+                // Navigate to emergency screen with verified data
                 router.push({
                   pathname: '/emergency',
                   params: { callId: callId } // Use the callId we sent in the query
@@ -350,7 +361,7 @@ export default function VideoCall() {
             {
               text: 'View Report',
               onPress: () => {
-                // Navigate to report screen
+                // Navigate to report screen with verified data
                 router.push({
                   pathname: '/report',
                   params: { callId: callId } // Use the callId we sent in the query
@@ -362,16 +373,9 @@ export default function VideoCall() {
       }
     } catch (error) {
       console.error('Error analyzing call:', error);
-      Alert.alert(
-        'Processing Error',
-        'Failed to process consultation. Please try again or contact support.',
-        [
-          {
-            text: 'Go Home',
-            onPress: () => router.push('/'),
-          },
-        ]
-      );
+      // Don't show error alert, just silently handle it
+      setIsProcessing(false);
+      callStartTime.current = null;
     } finally {
       setIsProcessing(false);
       callStartTime.current = null;

@@ -124,7 +124,7 @@ export async function pollStatus(
     onProgress?: (attempt: number, maxAttempts: number) => void;
   } = {}
 ): Promise<StatusResponse> {
-  const { maxAttempts = 30, interval = 2000, onProgress } = options;
+  const { maxAttempts = 5, interval = 2000, onProgress } = options;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

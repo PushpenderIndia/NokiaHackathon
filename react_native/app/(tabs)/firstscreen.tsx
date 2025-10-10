@@ -126,18 +126,21 @@ const FirstScreen = () => {
       // Generate unique call ID
       const callId = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-      // Extract patient symptoms from transcript
-      const patientMessages = transcript
-        .filter(msg => msg.speaker === 'patient')
-        .map(msg => msg.text)
-        .join('. ')
+      // Format the entire transcript as a conversation
+      const fullTranscript = transcript
+        .map(msg => `${msg.speaker === 'doctor' ? 'Doctor' : 'Patient'}: ${msg.text}`)
+        .join('\n')
 
-      // Build query for multi-agent API
-      const query = `Call ID: ${callId}. Patient name: Patient. Patient had a voice consultation lasting ${durationStr}. Patient reported: ${patientMessages || 'symptoms during consultation'}`
+      // Build query for multi-agent API with full transcript
+      const query = `Call ID: ${callId}. Patient name: Patient. Patient had a voice consultation lasting ${durationStr}.
+
+Full conversation transcript:
+${fullTranscript}`
 
       console.log('Generated Call ID:', callId)
       console.log('Call duration:', durationStr)
-      console.log('Patient symptoms:', patientMessages)
+      console.log('Full transcript:', fullTranscript)
+      console.log('Full query being sent to /analyze API:', query)
       console.log('Calling analyzeQuery API...')
 
       // Call multi-agent analyze API
